@@ -53,6 +53,10 @@ function Dashboard({ session, onSessionUpdated, onLogout }) {
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [newAccount, setNewAccount] = useState({
+    accountNumber: '', ownerName: '', ownerUsername: session.username || '', openingBalance: '0.00',
+  })
+  const [creatingAccount, setCreatingAccount] = useState(false)
 
   // Access token 過期時，前端用 refresh token 換取新的一組 token，再重送原請求一次。
   const request = useCallback(async (path, options = {}) => {
@@ -111,6 +115,19 @@ function Dashboard({ session, onSessionUpdated, onLogout }) {
     }
   }
 
+  async function createAccount(event) {
+    event.preventDefault(); setError(''); setMessage(''); setCreatingAccount(true)
+    try {
+      const created = await request('/admin/accounts', {
+        method: 'POST',
+        body: JSON.stringify({ ...newAccount, openingBalance: Number(newAccount.openingBalance) }),
+      })
+      setMessage(`已建立 ${created.accountNumber}，並指派給 ${newAccount.ownerUsername}`)
+      setNewAccount({ accountNumber: '', ownerName: '', ownerUsername: session.username || '', openingBalance: '0.00' })
+      await loadAccounts()
+    } catch (e) { setError(e.message) } finally { setCreatingAccount(false) }
+  }
+
   if (loading) return <main className="loading">正在載入帳戶…</main>
   const active = accounts.find((account) => account.accountNumber === selected)
   return <main className="app-shell">
@@ -121,6 +138,7 @@ function Dashboard({ session, onSessionUpdated, onLogout }) {
     {active && <section className="workspace">
       <article className="panel"><div className="panel-heading"><div><p className="eyebrow">AUDIT TRAIL</p><h2>交易紀錄</h2></div><span className="chip">{active.accountNumber}</span></div><div className="filters"><label>從<input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(0) }} /></label><label>至<input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(0) }} /></label></div><div className="table-wrap"><table><thead><tr><th>時間</th><th>類型</th><th>金額</th><th>餘額</th></tr></thead><tbody>{history?.content?.map((item) => <tr key={item.id}><td>{item.createdAt}</td><td><span className={item.status === 'FAILED' ? 'failed' : 'type'}>{item.transactionType}</span></td><td>{money(item.amount)}</td><td>{money(item.balanceAfter)}</td></tr>)}{history?.content?.length === 0 && <tr><td className="empty" colSpan="4">沒有符合條件的資料。</td></tr>}</tbody></table></div>{history && <div className="pagination"><span>第 {history.page + 1} / {Math.max(1, history.totalPages)} 頁，共 {history.totalElements} 筆</span><div><button disabled={history.page === 0} onClick={() => setPage((p) => p - 1)}>上一頁</button><button disabled={history.page + 1 >= history.totalPages} onClick={() => setPage((p) => p + 1)}>下一頁</button></div></div>}</article>
       <aside className="panel transfer"><p className="eyebrow">NEW TRANSFER</p><h2>安全轉帳</h2><p className="muted">扣款帳戶：{active.accountNumber}</p><form onSubmit={transfer}><label>收款帳號<input value={recipient} onChange={(e) => setRecipient(e.target.value)} required /></label><label>轉帳金額<input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required /></label><button className="primary-button" disabled={submitting}>{submitting ? '處理中…' : '確認轉帳'}</button></form><div className="security-note"><strong>安全檢查</strong><span>後端會再次驗證帳戶所有權、餘額與資料庫鎖定。</span></div></aside>
+      {session.role === 'ROLE_ADMIN' && <section className="panel" style={{ gridColumn: '1 / -1' }}><p className="eyebrow">ADMINISTRATION</p><h2>建立並指派帳戶</h2><p className="muted">建立時會同時留下 OPEN_ACCOUNT 稽核紀錄。</p><form onSubmit={createAccount} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', alignItems: 'end' }}><label>新帳號<input value={newAccount.accountNumber} onChange={(e) => setNewAccount({ ...newAccount, accountNumber: e.target.value.toUpperCase() })} placeholder="C001" required /></label><label>戶名<input value={newAccount.ownerName} onChange={(e) => setNewAccount({ ...newAccount, ownerName: e.target.value })} placeholder="Carol" required /></label><label>擁有者帳號<input value={newAccount.ownerUsername} onChange={(e) => setNewAccount({ ...newAccount, ownerUsername: e.target.value })} placeholder="huang_demo" required /></label><label>開戶金額<input type="number" min="0" step="0.01" value={newAccount.openingBalance} onChange={(e) => setNewAccount({ ...newAccount, openingBalance: e.target.value })} required /></label><button className="primary-button" disabled={creatingAccount}>{creatingAccount ? '建立中…' : '建立帳戶'}</button></form></section>}
     </section>}
   </main>
 }
