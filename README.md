@@ -4,7 +4,9 @@ Bank API 的 React 操作介面，用來展示後端的 JWT 驗證、帳戶所�
 
 ## 功能
 
-- 使用帳密登入並在瀏覽器分頁中暫存 JWT。
+- 使用帳密登入並在瀏覽器分頁中暫存 access token 與 refresh token。
+- Access token 過期時自動呼叫 refresh API，換取新的一組 token 後重送原請求。
+- 登出時撤銷 refresh token 並清除瀏覽器分頁資料。
 - 查看登入使用者自己的帳戶與餘額。
 - 查看交易紀錄、切換頁數及依日期篩選。
 - 從自己的帳戶進行轉帳，成功後重新讀取餘額與紀錄。

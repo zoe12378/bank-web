@@ -9,7 +9,11 @@ async function apiRequest(path, options = {}, token) {
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers },
   })
   const data = await response.json().catch(() => null)
-  if (!response.ok) throw new Error(data?.message || `Request failed (${response.status})`)
+  if (!response.ok) {
+    const error = new Error(data?.message || `Request failed (${response.status})`)
+    error.status = response.status
+    throw error
+  }
   return data
 }
 
@@ -25,7 +29,7 @@ function Login({ onLogin }) {
     event.preventDefault(); setError(''); setLoading(true)
     try {
       const result = await apiRequest('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) })
-      onLogin(result.accessToken)
+      onLogin(result)
     } catch (requestError) { setError(requestError.message) } finally { setLoading(false) }
   }
 
@@ -35,7 +39,8 @@ function Login({ onLogin }) {
   </main>
 }
 
-function Dashboard({ token, onLogout }) {
+function Dashboard({ session, onSessionUpdated, onLogout }) {
+  const token = session.accessToken
   const [accounts, setAccounts] = useState([])
   const [selected, setSelected] = useState(null)
   const [history, setHistory] = useState(null)
@@ -49,16 +54,37 @@ function Dashboard({ token, onLogout }) {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
+  // Access token 過期時，前端用 refresh token 換取新的一組 token，再重送原請求一次。
+  const request = useCallback(async (path, options = {}) => {
+    try {
+      return await apiRequest(path, options, token)
+    } catch (requestError) {
+      if (requestError.status !== 401 || !session.refreshToken) throw requestError
+
+      try {
+        const nextSession = await apiRequest('/auth/refresh', {
+          method: 'POST',
+          body: JSON.stringify({ refreshToken: session.refreshToken }),
+        })
+        onSessionUpdated(nextSession)
+        return await apiRequest(path, options, nextSession.accessToken)
+      } catch {
+        onLogout()
+        throw new Error('登入已過期，請重新登入。')
+      }
+    }
+  }, [onLogout, onSessionUpdated, session.refreshToken, token])
+
   const loadAccounts = useCallback(async () => {
-    const data = await apiRequest('/accounts', {}, token)
+    const data = await request('/accounts')
     setAccounts(data); setSelected((current) => current || data[0]?.accountNumber || null)
-  }, [token])
+  }, [request])
   const loadHistory = useCallback(async () => {
     if (!selected) return
     const params = new URLSearchParams({ page: String(page), size: '5' })
     if (from) params.set('from', from); if (to) params.set('to', to)
-    setHistory(await apiRequest(`/accounts/${selected}/transactions?${params}`, {}, token))
-  }, [from, page, selected, to, token])
+    setHistory(await request(`/accounts/${selected}/transactions?${params}`))
+  }, [from, page, request, selected, to])
 
   useEffect(() => { loadAccounts().catch((e) => setError(e.message)).finally(() => setLoading(false)) }, [loadAccounts])
   useEffect(() => { loadHistory().catch((e) => setError(e.message)) }, [loadHistory])
@@ -66,16 +92,29 @@ function Dashboard({ token, onLogout }) {
   async function transfer(event) {
     event.preventDefault(); setError(''); setMessage(''); setSubmitting(true)
     try {
-      const result = await apiRequest('/transfers', { method: 'POST', body: JSON.stringify({ fromAccountNumber: selected, toAccountNumber: recipient, amount: Number(amount) }) }, token)
+      const result = await request('/transfers', { method: 'POST', body: JSON.stringify({ fromAccountNumber: selected, toAccountNumber: recipient, amount: Number(amount) }) })
       setMessage(`已成功轉帳 ${money(result.amount)} 至 ${result.toAccountNumber}`); setAmount('')
       await loadAccounts(); await loadHistory()
-    } catch (e) { setError(e.message) } finally { setSubmitting(false) }
+  } catch (e) { setError(e.message) } finally { setSubmitting(false) }
+  }
+
+  async function logout() {
+    try {
+      if (session.refreshToken) {
+        await apiRequest('/auth/logout', {
+          method: 'POST',
+          body: JSON.stringify({ refreshToken: session.refreshToken }),
+        })
+      }
+    } finally {
+      onLogout()
+    }
   }
 
   if (loading) return <main className="loading">正在載入帳戶…</main>
   const active = accounts.find((account) => account.accountNumber === selected)
   return <main className="app-shell">
-    <header className="topbar"><div className="brand"><span className="bank-mark small">B</span>Bank Console</div><div><span className="secure">系統安全連線中</span><button className="text-button" onClick={onLogout}>登出</button></div></header>
+    <header className="topbar"><div className="brand"><span className="bank-mark small">B</span>Bank Console</div><div><span className="secure">系統安全連線中</span><button className="text-button" onClick={logout}>登出</button></div></header>
     <section className="heading"><div><p className="eyebrow">ACCOUNT OVERVIEW</p><h1>我的帳戶</h1></div><p className="muted">你的資料僅在 JWT 驗證後顯示。</p></section>
     {error && <p className="message error">{error}</p>}{message && <p className="message success">{message}</p>}
     <section className="account-grid">{accounts.map((account) => <button key={account.accountNumber} className={`account-card ${selected === account.accountNumber ? 'selected' : ''}`} onClick={() => { setSelected(account.accountNumber); setPage(0) }}><span>{account.ownerName}</span><strong>{money(account.balance)}</strong><small>{account.accountNumber}</small></button>)}</section>
@@ -87,8 +126,27 @@ function Dashboard({ token, onLogout }) {
 }
 
 export default function App() {
-  const [token, setToken] = useState(() => sessionStorage.getItem('bank_token'))
-  const login = (nextToken) => { sessionStorage.setItem('bank_token', nextToken); setToken(nextToken) }
-  const logout = () => { sessionStorage.removeItem('bank_token'); setToken(null) }
-  return token ? <Dashboard token={token} onLogout={logout} /> : <Login onLogin={login} />
+  const [session, setSession] = useState(() => {
+    try {
+      const savedSession = JSON.parse(sessionStorage.getItem('bank_session'))
+      return savedSession?.accessToken && savedSession?.refreshToken ? savedSession : null
+    } catch {
+      return null
+    }
+  })
+
+  const saveSession = (nextSession) => {
+    sessionStorage.setItem('bank_session', JSON.stringify(nextSession))
+    sessionStorage.removeItem('bank_token')
+    setSession(nextSession)
+  }
+  const logout = () => {
+    sessionStorage.removeItem('bank_session')
+    sessionStorage.removeItem('bank_token')
+    setSession(null)
+  }
+
+  return session
+    ? <Dashboard session={session} onSessionUpdated={saveSession} onLogout={logout} />
+    : <Login onLogin={saveSession} />
 }
