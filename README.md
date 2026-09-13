@@ -1,5 +1,7 @@
 # Bank Web
 
+[![Frontend CI](https://github.com/zoe12378/bank-web/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/zoe12378/bank-web/actions/workflows/frontend-ci.yml)
+
 Bank API 的 React 操作介面，用來展示後端的 JWT 驗證、帳戶所有權、交易紀錄分頁與安全轉帳功能。
 
 ## 功能
