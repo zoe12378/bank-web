@@ -4,6 +4,9 @@
 
 Bank API 的 React 操作介面，用來展示後端的 JWT 驗證、帳戶所有權、交易紀錄分頁與安全轉帳功能。
 
+- 後端 API：[Bank API](https://github.com/zoe12378/bank-api)
+- 一鍵啟動整套服務：[Bank Stack](https://github.com/zoe12378/bank-stack)
+
 ## 功能
 
 - 使用帳密登入並在瀏覽器分頁中暫存 access token 與 refresh token。
@@ -30,6 +33,10 @@ npm.cmd run dev
 ```powershell
 npm.cmd run build
 ```
+
+## Docker 執行
+
+若要同時啟動 MySQL、後端與本前端，請依照 [Bank Stack](https://github.com/zoe12378/bank-stack) 的說明操作。啟動完成後由 Docker 對外提供 `http://localhost:8081`，瀏覽器請求會由 Nginx 轉送到 API；前端不需要知道資料庫帳密或 API 容器位址。
 
 ## 技術
 
