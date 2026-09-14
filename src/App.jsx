@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 
-const API_BASE = '/api'
+// 本機開發走 Vite 代理；部署後由 Vercel 的建置環境提供 Railway API 網址。
+const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') || '/api'
 
 async function apiRequest(path, options = {}, token) {
   const response = await fetch(`${API_BASE}${path}`, {

@@ -38,6 +38,10 @@ npm.cmd run build
 
 若要同時啟動 MySQL、後端與本前端，請依照 [Bank Stack](https://github.com/zoe12378/bank-stack) 的說明操作。啟動完成後由 Docker 對外提供 `http://localhost:8081`，瀏覽器請求會由 Nginx 轉送到 API；前端不需要知道資料庫帳密或 API 容器位址。
 
+## 雲端部署設定
+
+部署到 Vercel 時，設定環境變數 `VITE_API_BASE_URL` 為 Railway 後端的完整 API 根路徑，例如 `https://your-api.up.railway.app/api`。這個值是公開 API 網址，不是密碼；Vite 只有 `VITE_` 開頭的變數會在建置時提供給前端。
+
 ## 技術
 
 - React 19
