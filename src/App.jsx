@@ -23,20 +23,27 @@ const money = (value) => new Intl.NumberFormat('zh-TW', { style: 'currency', cur
 function Login({ onLogin }) {
   const [username, setUsername] = useState('huang_demo')
   const [password, setPassword] = useState('')
+  const [registering, setRegistering] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   async function submit(event) {
     event.preventDefault(); setError(''); setLoading(true)
     try {
-      const result = await apiRequest('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) })
-      onLogin(result)
+      if (registering) {
+        await apiRequest('/auth/register', { method: 'POST', body: JSON.stringify({ username, password }) })
+        setRegistering(false)
+        setError('註冊成功，請用這組帳號與密碼登入。')
+      } else {
+        const result = await apiRequest('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) })
+        onLogin(result)
+      }
     } catch (requestError) { setError(requestError.message) } finally { setLoading(false) }
   }
 
   return <main className="login-layout">
     <section className="login-copy"><p className="eyebrow">BANK API DEMO</p><h1>把後端規則，變成看得見的金融體驗。</h1><p>這個介面串接 Spring Boot 後端，展示 JWT 登入、帳戶所有權、交易稽核與安全轉帳。</p><div className="feature-list"><span>JWT 驗證</span><span>安全轉帳</span><span>交易分頁</span></div></section>
-    <section className="login-card"><div className="bank-mark">B</div><p className="eyebrow">WELCOME BACK</p><h2>登入銀行後台</h2><p className="muted">請使用已註冊的測試帳號登入。</p><form onSubmit={submit}><label>使用者名稱<input value={username} onChange={(event) => setUsername(event.target.value)} required /></label><label>密碼<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{error && <p className="message error">{error}</p>}<button className="primary-button" disabled={loading}>{loading ? '登入中…' : '安全登入'}</button></form></section>
+    <section className="login-card"><div className="bank-mark">B</div><p className="eyebrow">{registering ? 'CREATE ACCOUNT' : 'WELCOME BACK'}</p><h2>{registering ? '建立測試帳號' : '登入銀行後台'}</h2><p className="muted">{registering ? '密碼至少需要 8 個字元。' : '請使用已註冊的測試帳號登入。'}</p><form onSubmit={submit}><label>使用者名稱<input value={username} onChange={(event) => setUsername(event.target.value)} minLength="3" maxLength="50" required /></label><label>密碼<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength="8" required /></label>{error && <p className={`message ${error.startsWith('註冊成功') ? 'success' : 'error'}`}>{error}</p>}<button className="primary-button" disabled={loading}>{loading ? '處理中…' : registering ? '建立帳號' : '安全登入'}</button></form><button className="mode-button" type="button" onClick={() => { setRegistering((current) => !current); setError('') }}>{registering ? '已有帳號？返回登入' : '還沒有帳號？建立測試帳號'}</button></section>
   </main>
 }
 
